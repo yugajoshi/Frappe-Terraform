@@ -3,7 +3,7 @@ provider "aws" {
   
 }
 module "frappe_vpc" {
-    source = "./frappe_vpc/frappe"
+    source = "./frappe_module/frappe_vpc"
     vpc_cidr = var.vpc_cidr
     public_subnet_cidr = var.public_subnet_cidr
     private_subnet_cidr = var.private_subnet_cidr
@@ -13,7 +13,7 @@ module "frappe_vpc" {
   
 }
 module "frappe_instances" {
-    source = "./frappe_ec2/frappe_ec2"
+    source = "./frappe_module/frappe_ec2"
     project = var.project
     ami_id = var.ami_id
     instance_type = var.instance_type
