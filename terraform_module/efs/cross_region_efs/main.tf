@@ -1,31 +1,31 @@
 provider "aws" {
-    region = "us-east-2"
+    region = var.main_region
 }
 provider "aws" {
     alias = "peer" 
-    region = "ap-south-1"
+    region = var.peer_region
 }
 
 resource "aws_vpc" "my-vpc" {
-  provider = aws
-    cidr_block = "10.0.0.0/16"
+    provider = aws
+    cidr_block = var.main_vpc_cidr
     enable_dns_hostnames = true
     enable_dns_support = true
     tags = {
-      Name = "my-vpc"
-      env = "dev"
+      Name = "${var.project}-vpc"
+      env = var.env
     }
   
 }
 
 resource "aws_subnet" "public-subnet" {
-    cidr_block = "10.0.1.0/24"
+    cidr_block = var.main_vpc_subnet_cidr
     vpc_id = aws_vpc.my-vpc.id
     map_public_ip_on_launch =  true
-    availability_zone = "us-east-2a"
+    availability_zone = var.main_vpc_subnet_az
     tags = {
-      Name = "public-subnet"
-      env = "dev"
+      Name = "${var.project}-public-subnet"
+      env = var.env
     }
   
 }
@@ -33,7 +33,7 @@ resource "aws_subnet" "public-subnet" {
 resource "aws_internet_gateway" "my-igw" {
     vpc_id = aws_vpc.my-vpc.id
     tags = {
-      Name = "my-igw"
+      Name = "${var.project}-my-igw"
     }
   
 }
@@ -50,7 +50,7 @@ resource "aws_default_route_table" "public-rt" {
 
 resource "aws_route" "vpc_peering_route" {
   route_table_id = aws_vpc.my-vpc.default_route_table_id
-  destination_cidr_block = "172.32.0.0/16"
+  destination_cidr_block = var.peer_vpc_cidr
   vpc_peering_connection_id = aws_vpc_peering_connection.my-peer.id
   depends_on = [ aws_vpc_peering_connection.my-peer,aws_vpc_peering_connection_accepter.my-peer-accepter ]
   
@@ -59,7 +59,7 @@ resource "aws_route" "vpc_peering_route" {
 resource "aws_vpc_peering_connection" "my-peer" {
   vpc_id = aws_vpc.my-vpc.id
   peer_vpc_id = aws_vpc.my-vpc-1.id
-  peer_region = "ap-south-1"
+  peer_region = var.peer_region
   auto_accept = false
   # accepter {
   #   allow_remote_vpc_dns_resolution = true
@@ -69,7 +69,7 @@ resource "aws_vpc_peering_connection" "my-peer" {
   # }
   
   tags = {
-    Side = "Requester"
+    Side = "${var.project}-Requester"
   }
   depends_on = [ aws_vpc.my-vpc, aws_vpc.my-vpc-1 ]
 }
@@ -83,7 +83,7 @@ resource "aws_vpc_peering_connection_accepter" "my-peer-accepter" {
     #   allow_remote_vpc_dns_resolution = true
     # }
     tags = {
-      Side = "Accepter"
+      Side = "${var.project}-Accepter"
     }
     depends_on = [ aws_vpc_peering_connection.my-peer ]
 }
@@ -92,26 +92,26 @@ resource "aws_vpc_peering_connection_accepter" "my-peer-accepter" {
 
 ########################################
 resource "aws_vpc" "my-vpc-1" {
-    cidr_block = "172.32.0.0/16"
+    cidr_block = var.peer_vpc_cidr
     provider = aws.peer
     enable_dns_hostnames = true
     enable_dns_support = true
     tags = {
-      Name = "my-vpc"
-      env = "dev"
+      Name = "${var.project}-my-vpc"
+      env = var.env
     }
   
 }
 
 resource "aws_subnet" "public-subnet-1" {
-    cidr_block = "172.32.1.0/24"
+    cidr_block = var.peer_vpc_subnet_cidr
     provider = aws.peer
     vpc_id = aws_vpc.my-vpc-1.id
     map_public_ip_on_launch =  true
-    availability_zone = "ap-south-1a"
+    availability_zone = var.peer_vpc_subnet_az
     tags = {
-      Name = "public-subnet"
-      env = "dev"
+      Name = "${var.project}-public-subnet"
+      env = var.env
     }
   
 }
@@ -120,7 +120,7 @@ resource "aws_internet_gateway" "my-igw-1" {
     provider = aws.peer
     vpc_id = aws_vpc.my-vpc-1.id
     tags = {
-      Name = "my-igw"
+      Name = "${var.project}-my-igw"
     }
   
 }
@@ -140,7 +140,7 @@ resource "aws_default_route_table" "public-rt-1" {
 resource "aws_route" "vpc1_peering_route" {
   provider = aws.peer
   route_table_id = aws_vpc.my-vpc-1.default_route_table_id
-  destination_cidr_block = "10.0.0.0/16"
+  destination_cidr_block = var.main_vpc_cidr
   vpc_peering_connection_id = aws_vpc_peering_connection.my-peer.id
   depends_on = [ aws_vpc_peering_connection.my-peer,aws_vpc_peering_connection_accepter.my-peer-accepter ]
   
@@ -148,7 +148,7 @@ resource "aws_route" "vpc1_peering_route" {
 
 ############################
 resource "aws_efs_file_system" "my_efs" {
-    creation_token = "my-efs"
+    creation_token = "${var.project}-my-efs"
     depends_on = [ aws_vpc.my-vpc ]
 }
 
@@ -163,7 +163,7 @@ resource "aws_efs_mount_target" "efs_mount_target_a" {
 
 
 resource "aws_security_group" "nfs_sg" {
-    name = "nfs-sg"
+    name = "${var.project}-nfs-sg"
     provider = aws
     vpc_id = aws_vpc.my-vpc.id
     ingress {
@@ -208,10 +208,10 @@ resource "aws_security_group" "nfs_sg" {
 
 resource "aws_instance" "my-ec2_a" {
     provider = aws
-    ami = "ami-08221e706f343d7b7"
-    key_name = "ohio"
+    ami = var.main_vpc_instance_ami
+    key_name = var.main_vpc_instance_key
     security_groups = [aws_security_group.nfs_sg.id]
-    instance_type = "t2.micro"
+    instance_type = var.main_vpc_instance_type
     subnet_id = aws_subnet.public-subnet.id
 
     connection {
@@ -234,10 +234,10 @@ resource "aws_instance" "my-ec2_a" {
 
 resource "aws_instance" "my-ec2_b" {
     provider = aws.peer
-    ami = "ami-0144277607031eca2"
-    key_name = "public_linux"
+    ami = var.peer_vpc_instance_ami
+    key_name = var.peer_vpc_instance_key
     security_groups = [aws_security_group.nfs_sg-1.id]
-    instance_type = "t2.micro"
+    instance_type = var.peer_vpc_instance_type
     subnet_id = aws_subnet.public-subnet-1.id
 
     connection {
@@ -259,7 +259,7 @@ resource "aws_instance" "my-ec2_b" {
 
 
 resource "aws_security_group" "nfs_sg-1" {
-    name = "nfs-sg"
+    name = "${var.project}-nfs-sg"
     provider = aws.peer
     vpc_id = aws_vpc.my-vpc-1.id
     ingress {
@@ -297,5 +297,4 @@ resource "aws_security_group" "nfs_sg-1" {
         description = "Allow All outbound"
         cidr_blocks = ["0.0.0.0/0"]
     }
-  
 }
